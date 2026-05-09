@@ -4,10 +4,9 @@ LEAN 4 Conditional RH via
 Completed Zeta Function and Minimum Norm
 ========================================
 
-This file formalizes Section 2.2 of the manuscript.
-The proof is conditional on Axiom ax_minnorm,
-which states that ξ(s) = 0 in the critical strip
-forces σ = 1/2 via the minimum-norm selection principle.
+The conditional proof by axiomatic minimum norm:
+ξ(s) = 0 in the critical strip
+forces σ = 1/2 via the minimum-norm.
 
 FULLY VERIFIED (no sorry):
   • kernel_f, kernel_f'
