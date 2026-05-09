@@ -83,7 +83,7 @@ def dirichlet_step (N : ℕ) (s : ℂ) (x : ℝ) : ℂ :=
 ## The Tilted Kernel and its L² Norm
 -/
 
-/-- The theta-derived kernel. For Lean purposes we use
+/-- The theta-derived kernel. For Lean purposes, we use
     the explicit form F(u) = exp(-π*eᵘ - u/4) scaled
     to be symmetric. The key properties are proved below. -/
 noncomputable def F_kernel (u : ℝ) : ℝ :=
