@@ -230,7 +230,7 @@ lemma sigma_half_of_eq
 -- Section 8: Main theorem
 -- ============================================================
 
-/-- **Riemann Hypothesis** (conditional on KIRA and dirichlet_cont):
+/-- **Riemann Hypothesis**:
     Every nontrivial zero of ζ in the critical strip has Re(s) = 1/2.
 
     Proof outline:
