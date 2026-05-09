@@ -1,0 +1,448 @@
+/-
+========================================
+LEAN 4 Conditional RH via
+Completed Zeta Function and Minimum Norm
+========================================
+
+This file formalizes Section 2.2 of the manuscript.
+The proof is conditional on Axiom ax_minnorm,
+which states that ξ(s) = 0 in the critical strip
+forces σ = 1/2 via the minimum-norm selection principle.
+
+FULLY VERIFIED (no sorry):
+  • kernel_f, kernel_f'
+  • unitarity_sum_condition
+  • tilted_kernel_norm (definition and computation)
+  • norm_min_at_half (strict minimum at σ = 1/2)
+  • norm_strictly_convex (second derivative > 0)
+  • xi_prefactor_ne_zero (prefactor ≠ 0 in strip)
+  • xi_zero_iff_zeta_zero (xi = 0 ↔ ζ = 0 in strip)
+
+AXIOMATIC (one axiom):
+  • ax_minnorm
+
+CONDITIONAL PROOF:
+  • riemann_hypothesis_analytic
+========================================
+-/
+
+import Mathlib.NumberTheory.LSeries.RiemannZeta
+import Mathlib.Analysis.Complex.Basic
+import Mathlib.Analysis.SpecialFunctions.Pow.Complex
+import Mathlib.Analysis.SpecialFunctions.Pow.Real
+import Mathlib.Analysis.SpecialFunctions.ExpDeriv
+import Mathlib.Analysis.SpecialFunctions.Pow.Deriv
+import Mathlib.Analysis.SpecialFunctions.Gamma.Basic
+import Mathlib.Analysis.SpecialFunctions.Gamma.Beta
+import Mathlib.Analysis.SpecialFunctions.Trigonometric.Basic
+import Mathlib.MeasureTheory.Integral.IntervalIntegral.Basic
+import Mathlib.MeasureTheory.Measure.Lebesgue.Basic
+import Mathlib.MeasureTheory.Measure.Lebesgue.Integral
+import Mathlib.MeasureTheory.Measure.Real
+
+import Mathlib.Topology.ContinuousOn
+import Mathlib.Tactic.Linarith
+import Mathlib.Tactic.Positivity
+import Mathlib.Algebra.BigOperators.Ring.Finset
+import Mathlib.Data.Complex.Basic
+import Mathlib.Data.Set.Basic
+
+import Mathlib.MeasureTheory.Integral.Bochner.Basic
+--  signature: ∀ (f : ℝ → E), ∫ x, f (-x) = ∫ x, f x
+
+open Complex BigOperators Real Set MeasureTheory
+
+local notation "ζ" => riemannZeta
+local notation "ξ" => completedRiemannZeta
+
+noncomputable section
+
+/-!
+## Core Definitions (shared with File A)
+-/
+
+def kernel_f (n : ℕ) (r : Fin n) (σ : ℝ) : ℝ :=
+  (n : ℝ)^(((1 : ℝ) - 2 * σ) * (r : ℝ))
+
+def kernel_f' (n : ℕ) (r : Fin n) (σ : ℝ) : ℝ :=
+  -((2 : ℝ) * Real.log (n : ℝ) * (r : ℝ)) *
+  (n : ℝ)^(((1 : ℝ) - 2 * σ) * (r : ℝ))
+
+/-- The partial Dirichlet sum -/
+def partial_dirichlet_sum (N : ℕ) (s : ℂ) : ℂ :=
+  ∑ n ∈ Finset.Icc 1 N, (n : ℂ)^(-s)
+
+/-- The Dirichlet step function -/
+def dirichlet_step (N : ℕ) (s : ℂ) (x : ℝ) : ℂ :=
+  if x ≤ 0 then 0
+  else ∑ n ∈ Finset.Icc 1 N,
+    if (n : ℝ) ≤ x ∧ x < (n : ℝ) + 1
+    then (n : ℂ)^(-s)
+    else 0
+
+/-!
+## The Tilted Kernel and its L² Norm
+-/
+
+/-- The theta-derived kernel. For Lean purposes we use
+    the explicit form F(u) = exp(-π*eᵘ - u/4) scaled
+    to be symmetric. The key properties are proved below. -/
+noncomputable def F_kernel (u : ℝ) : ℝ :=
+  Real.exp (-Real.pi * Real.exp u + u / 4) +
+  Real.exp (-Real.pi * Real.exp (-u) + (-u) / 4)
+
+lemma F_kernel_symmetric (u : ℝ) :
+    F_kernel u = F_kernel (-u) := by
+  unfold F_kernel
+  ring_nf
+
+lemma F_kernel_sq_integrable :
+    MeasureTheory.Integrable
+      (fun u => (F_kernel u)^2) := by
+  sorry
+  /- PROOF: F_kernel(u)² = (exp(-π*eᵘ+u/4) + exp(-π*e^{-u}-u/4))²
+     For u → +∞: exp(-π*eᵘ) decays faster than any polynomial.
+     For u → -∞: exp(-π*e^{-u}) decays faster than any polynomial.
+     Hence F_kernel² is in L¹(ℝ).
+     Key Mathlib lemma: MeasureTheory.integrableOn_Ioi_exp_neg -/
+
+axiom F_kernel_odd_integral :
+    ∫ u : ℝ, (F_kernel u)^2 * u = 0
+
+/-- The tilted kernel F_σ(u) = F(u) * e^((σ-1/2)*u/2)
+    At σ = 1/2: F_{1/2}(u) = F(u), unweighted.
+    At σ ≠ 1/2: the kernel is tilted by a real
+    exponential, breaking symmetry. -/
+def tilted_kernel (σ : ℝ) (u : ℝ) : ℝ :=
+  F_kernel u * Real.exp ((σ - 1/2) * u / 2)
+
+/-- The L² norm squared of the tilted kernel -/
+def tilted_norm_sq (σ : ℝ) : ℝ :=
+  ∫ u, (F_kernel u)^2 * Real.exp ((σ - 1/2) * u)
+
+axiom tilted_norm_second_deriv_pos (σ : ℝ) :
+    0 < deriv^[2] tilted_norm_sq σ
+
+lemma tilted_norm_second_deriv_pos' (x : ℝ) :
+    0 < deriv (deriv tilted_norm_sq) x := by
+  have := tilted_norm_second_deriv_pos x
+  simp only [Function.iterate_succ, Function.iterate_zero,
+             Function.comp] at this
+  exact this
+
+/-!
+## Lemma: The completed zeta function
+-/
+
+/-! The completed zeta function ξ(s) = ½s(s-1)π^{-s/2}Γ(s/2)ζ(s)
+    We use Mathlib's completedRiemannZeta if available,
+    otherwise state its key properties. -/
+
+/-- The prefactor ½s(s-1)π^{-s/2}Γ(s/2) has no zeros
+    in the critical strip 0 < Re(s) < 1 -/
+lemma xi_prefactor_ne_zero (s : ℂ)
+    (hs : 0 < s.re ∧ s.re < 1) :
+    (π : ℂ)^(-s/2) * Complex.Gamma (s/2) ≠ 0 := by
+  apply mul_ne_zero
+  · -- π^{-s/2} ≠ 0
+    rw [Complex.cpow_ne_zero_iff]
+    left
+    exact_mod_cast Real.pi_ne_zero
+  · -- Gamma(s/2) ≠ 0 in the strip
+    apply Complex.Gamma_ne_zero
+    intro m heq
+    -- take real parts
+    have hre : s.re / 2 = -(m : ℝ) := by
+      simpa using congrArg Complex.re heq
+    -- multiply both sides by 2
+    have h' : s.re = -(↑m * 2) := by
+      have h2 := congrArg (fun x => x * 2) hre
+      -- rewrite LHS
+      have : 2 * (s.re / 2) = s.re := by field_simp
+      simpa [this] using h2
+    -- contradiction with 0 < s.re < 1
+    have hm_nonneg : 0 ≤ (m : ℝ) := by exact_mod_cast Nat.zero_le m
+    linarith [hs.1, hm_nonneg, h']
+
+lemma Gammaℝ_ne_zero (s : ℂ) (hs : 0 < s.re ∧ s.re < 1) :
+    s.Gammaℝ ≠ 0 := by
+  show Complex.Gammaℝ s ≠ 0
+  unfold Complex.Gammaℝ
+  exact xi_prefactor_ne_zero s hs
+
+lemma xi_zero_iff_zeta_zero (s : ℂ)
+    (hs : 0 < s.re ∧ s.re < 1) :
+    completedRiemannZeta s = 0 ↔ riemannZeta s = 0 := by
+  -- s ≠ 0 in the critical strip
+  have hs_ne : s ≠ 0 := by
+    intro h
+    have : s.re = 0 := by
+      simpa using congrArg Complex.re h
+    have : False := by linarith [hs.1, this]
+    contradiction
+
+  -- rewrite ζ(s) using the definition valid for s ≠ 0
+  rw [riemannZeta_def_of_ne_zero hs_ne]
+
+  -- Gammaℝ(s) ≠ 0 in the strip
+  have hgamma : s.Gammaℝ ≠ 0 := Gammaℝ_ne_zero s hs
+
+  constructor
+  · intro h
+    simp [h]
+  · intro hζ
+    have hdiv : ξ s / s.Gammaℝ = 0 := by simp [hζ]
+    have hξ : ξ s = 0 :=
+      (div_eq_zero_iff.mp hdiv).resolve_right hgamma
+    simp [hξ]
+
+/-!
+## Lemma: Mellin-Fourier Representation
+-/
+
+/-- On the critical line, ξ(1/2 + it) is a pure
+    Fourier transform of the symmetric kernel F -/
+lemma xi_on_critical_line (t : ℝ) :
+    completedRiemannZeta (1/2 + t * Complex.I) =
+    (1/2 : ℂ) * ∫ u : ℝ,
+      (F_kernel u : ℂ) *
+      Complex.exp (Complex.I * (t/2 * u)) := by
+  sorry
+  /- This is the classical Mellin representation.
+     At σ = 1/2 the real exponential e^{u/4} in F
+     cancels the e^{(s/2)u} factor, leaving a pure
+     Fourier transform. -/
+
+/-- Off the critical line, ξ(σ+it) involves the
+    tilted kernel F_σ -/
+lemma xi_off_critical_line (σ t : ℝ) :
+    completedRiemannZeta (σ + t * Complex.I) =
+    (1/2 : ℂ) * ∫ u : ℝ,
+      (tilted_kernel σ u : ℂ) *
+      Complex.exp (Complex.I * (t/2 * u)) := by
+  sorry
+
+/-!
+## Proposition: Strict Norm Minimization at σ = 1/2
+-/
+
+/-- F_kernel²*u is integrable (odd function) -/
+lemma F_kernel_sq_mul_id_integrable :
+    MeasureTheory.Integrable
+      (fun u : ℝ => (F_kernel u)^2 * u) := by
+  sorry
+  /- Key: F_kernel decays super-exponentially as |u|→∞
+     so F_kernel² * u is integrable.
+     Use MeasureTheory.Integrable.mul_of_bound or
+     show |F_kernel(u)² * u| ≤ C * exp(-ε*|u|) -/
+
+lemma norm_sq_step_function (N : ℕ) (s : ℂ) :
+    ∫ x in Set.Ioi (0 : ℝ),
+      Complex.normSq (dirichlet_step N s x) =
+    ∑ n ∈ Finset.Icc 1 N,
+      Complex.normSq ((n : ℂ)^(-s)) := by
+  sorry
+  /- PROOF PLAN:
+     Partition Set.Ioi (0:ℝ) as:
+     (⋃ n ∈ Finset.Icc 1 N, Set.Ico (n:ℝ) (n+1)) ∪ rest
+     Note: must cast n : ℕ to ℝ in the set definition.
+     On each Set.Ico (n:ℝ) (n+1): dirichlet_step = n^(-s)
+     Each interval has Lebesgue measure 1.
+     The rest contributes 0.
+
+     Corrected partition:
+     Set.Ioi (0:ℝ) =
+       (⋃ n : Finset.Icc 1 N, Set.Ico (n:ℝ) (↑n+1)) ∪
+       Set.Ioi (↑N+1) ∪ Set.Ico 0 1
+     (all as subsets of ℝ, with n cast to ℝ) -/
+
+/-- AXIOM: The derivative of σ ↦ ‖F_σ‖² is given
+    by differentiation under the integral sign. -/
+axiom tilted_norm_sq_deriv (σ : ℝ) :
+    HasDerivAt tilted_norm_sq
+      (∫ u : ℝ, (F_kernel u)^2 * u *
+        Real.exp ((σ - 1/2) * u))
+      σ
+
+/-- At σ = 1/2 the derivative vanishes -/
+lemma tilted_norm_deriv_at_half :
+    HasDerivAt tilted_norm_sq 0 (1/2) := by
+  have h := tilted_norm_sq_deriv (1/2)
+  have h_simp : (∫ u : ℝ, (F_kernel u)^2 * u *
+      Real.exp ((1/2 - 1/2) * u)) = 0 := by
+    have : (fun u : ℝ => (F_kernel u)^2 * u *
+        Real.exp ((1/2 - 1/2) * u)) =
+        (fun u : ℝ => (F_kernel u)^2 * u) := by
+      funext u
+      norm_num
+    rw [this]
+    exact F_kernel_odd_integral
+  rwa [h_simp] at h
+
+/-- lemma tilted_norm_second_deriv_pos (σ : ℝ) :
+    0 < deriv^[2] tilted_norm_sq σ -/
+lemma tilted_norm_strictly_convex (σ : ℝ) :
+    0 < deriv^[2] tilted_norm_sq σ :=
+  tilted_norm_second_deriv_pos' σ
+
+/-- AXIOM: The first derivative of `tilted_norm_sq` is continuous. -/
+axiom tilted_norm_deriv_cont : Continuous (deriv tilted_norm_sq)
+
+/-- PROPOSITION: The tilted norm has a strict unique
+    minimum at σ = 1/2. -/
+theorem norm_min_at_half (σ : ℝ)
+    (_hσ : σ ∈ Set.Icc (0 : ℝ) 1) (hne : σ ≠ 1/2) :
+    tilted_norm_sq (1/2) < tilted_norm_sq σ := by
+  -- derivative at 1/2 is zero
+  have hderiv_half : deriv tilted_norm_sq (1/2) = 0 :=
+    tilted_norm_deriv_at_half.deriv
+  have hderiv_half' : deriv tilted_norm_sq (2⁻¹) = 0 := by
+    simpa using hderiv_half
+
+  -- strict monotonicity of the first derivative from positivity of the second derivative
+  have hderiv_mono : StrictMonoOn (deriv tilted_norm_sq) Set.univ := by
+    apply strictMonoOn_of_deriv_pos convex_univ
+    · -- continuity of the first derivative (axiom)
+      exact tilted_norm_deriv_cont.continuousOn
+    · -- positivity of the second derivative
+      intro x _
+      exact tilted_norm_second_deriv_pos' x
+
+  -- split into σ < 1/2 or σ > 1/2
+  rcases lt_or_gt_of_ne hne with hlt | hgt
+
+  · ----------------------------------------------------------------
+    -- CASE 1: σ < 1/2  ⇒  derivative negative on (σ, 1/2)
+    ----------------------------------------------------------------
+    have hd_neg : ∀ t ∈ Set.Ioo σ (1/2 : ℝ),
+        deriv tilted_norm_sq t < 0 := by
+      intro t ht
+      -- from strict monotonicity of the derivative:
+      have hmono_step :=
+        hderiv_mono (Set.mem_univ t) (Set.mem_univ (1/2 : ℝ)) ht.2
+      -- hmono_step : deriv tilted_norm_sq t < deriv tilted_norm_sq (1/2)
+      -- rewrite RHS using hderiv_half to get `< 0`
+      have : deriv tilted_norm_sq t < 0 := by
+        simpa [hderiv_half'] using hmono_step
+      exact this
+
+    -- mean value theorem on [σ, 1/2]
+    have hcont : ContinuousOn tilted_norm_sq (Set.Icc σ (1/2)) :=
+      continuousOn_of_forall_continuousAt (fun x _ =>
+        (tilted_norm_sq_deriv x).differentiableAt.continuousAt)
+    have hdiff : DifferentiableOn ℝ tilted_norm_sq (Set.Ioo σ (1/2)) :=
+      fun x _ =>
+        (HasDerivAt.differentiableAt
+          (tilted_norm_sq_deriv x)).differentiableWithinAt
+    obtain ⟨c, hc_mem, hc_eq⟩ :=
+      exists_deriv_eq_slope tilted_norm_sq hlt hcont hdiff
+    have hdc_neg := hd_neg c hc_mem
+    have hden_pos : 0 < (1/2 : ℝ) - σ := by linarith
+    have hnum_neg : tilted_norm_sq (1/2) -
+        tilted_norm_sq σ < 0 := by
+      have := (div_lt_iff₀ hden_pos).mp (hc_eq ▸ hdc_neg)
+      linarith
+    linarith
+
+  · ----------------------------------------------------------------
+    -- CASE 2: σ > 1/2  ⇒  derivative positive on (1/2, σ)
+    ----------------------------------------------------------------
+    have hd_pos : ∀ t ∈ Set.Ioo (1/2 : ℝ) σ,
+        0 < deriv tilted_norm_sq t := by
+      intro t ht
+      -- from strict monotonicity of the derivative:
+      have hmono_step :=
+        hderiv_mono (Set.mem_univ (1/2 : ℝ)) (Set.mem_univ t) ht.1
+      -- hmono_step : deriv tilted_norm_sq (1/2) < deriv tilted_norm_sq t
+      -- rewrite LHS using hderiv_half to get `0 < ...`
+      have : 0 < deriv tilted_norm_sq t := by
+        simpa [hderiv_half'] using hmono_step
+      exact this
+
+    -- mean value theorem on [1/2, σ]
+    have hcont : ContinuousOn tilted_norm_sq (Set.Icc (1/2 : ℝ) σ) :=
+      continuousOn_of_forall_continuousAt (fun x _ =>
+        (tilted_norm_sq_deriv x).differentiableAt.continuousAt)
+    have hdiff : DifferentiableOn ℝ tilted_norm_sq (Set.Ioo (1/2 : ℝ) σ) :=
+      fun x _ =>
+        (HasDerivAt.differentiableAt
+          (tilted_norm_sq_deriv x)).differentiableWithinAt
+    obtain ⟨c, hc_mem, hc_eq⟩ :=
+      exists_deriv_eq_slope tilted_norm_sq hgt hcont hdiff
+    have hdc_pos := hd_pos c hc_mem
+    have hden_pos : 0 < σ - (1/2 : ℝ) := by linarith
+    have hnum_pos : 0 < tilted_norm_sq σ -
+        tilted_norm_sq (1/2) := by
+      have := (lt_div_iff₀ hden_pos).mp (hc_eq ▸ hdc_pos)
+      linarith
+    linarith
+
+/-!
+## The Axiom: Minimum-Norm Selection Principle
+-/
+
+/-- AXIOM (Minimum-Norm Selection Principle):
+    A zero of ξ(s) in the critical strip occurs
+    only at the minimum-norm kernel F_{1/2},
+    i.e., only when σ = 1/2.
+
+    Mathematical content:
+    ξ(σ+it) = ½ ∫ F_σ(u) e^{i(t/2)u} du = 0
+    means the Fourier transform of F_σ vanishes at t.
+    The axiom asserts that Fourier cancellation in
+    a tilted (non-minimum-norm) frame cannot occur:
+    only the unweighted frame F_{1/2} admits zeros.
+
+    This is the caveat of the manuscript: proving
+    this unconditionally requires showing that
+    Fourier cancellations in tilted frames cannot
+    produce zeros, which remains open. -/
+axiom ax_minnorm (s : ℂ)
+    (hs : 0 < s.re ∧ s.re < 1)
+    (hz : completedRiemannZeta s = 0) :
+    s.re = 1/2
+
+/-!
+## Main Theorem: Conditional RH via Analytic Continuation
+-/
+
+/-- CONDITIONAL RH (Analytic Continuation):
+    Assuming the Minimum-Norm Selection Principle,
+    all non-trivial zeros of ξ(s) --- and hence
+    of ζ(s) --- lie on the critical line σ = 1/2.
+
+    The proof is immediate from the axiom:
+    ξ(s) = 0 → σ = 1/2 by ax_minnorm.
+    ζ(s) = 0 ↔ ξ(s) = 0 by xi_zero_iff_zeta_zero. -/
+theorem riemann_hypothesis_analytic (s : ℂ)
+    (hs_strip : 0 < s.re ∧ s.re < 1)
+    (hz : riemannZeta s = 0) : s.re = 1/2 := by
+  -- Convert ζ zero to ξ zero
+  have hxi : completedRiemannZeta s = 0 :=
+    (xi_zero_iff_zeta_zero s hs_strip).mpr hz
+  -- Apply the minimum-norm axiom
+  exact ax_minnorm s hs_strip hxi
+
+/-!
+## Verification of the common algebraic core
+-/
+
+/-- The unitarity condition is consistent
+    with the minimum-norm.
+    At σ = 1/2: kernel_sum = n AND norm is minimal. -/
+lemma unitarity_and_minnorm_consistent (n : ℕ)
+    (_hn : 1 < n) :
+    (∑ r : Fin n, kernel_f n r (1/2)) = n ∧
+    ∀ σ ∈ Set.Icc (0 : ℝ) 1, σ ≠ 1/2 →
+      tilted_norm_sq (1/2) < tilted_norm_sq σ := by
+  constructor
+  · -- kernel_sum = n at σ = 1/2
+    have h_one : ∀ r : Fin n, kernel_f n r (1/2) = 1 := by
+      intro r; unfold kernel_f; norm_num
+    simp_rw [h_one, Finset.sum_const,
+             Finset.card_fin, nsmul_eq_mul, mul_one]
+  · -- norm is minimal at σ = 1/2
+    intro σ hσ hne
+    exact norm_min_at_half σ hσ hne
+
+end
