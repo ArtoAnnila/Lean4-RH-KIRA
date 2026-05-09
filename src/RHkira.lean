@@ -1,3 +1,10 @@
+/-
+============================================
+LEAN 4 RH via
+Kernel–Inversion Reconciliation Axiom (KIRA)
+============================================
+-/
+
 import Mathlib.NumberTheory.LSeries.RiemannZeta
 import Mathlib.Topology.Algebra.InfiniteSum.Basic
 import Mathlib.Topology.Algebra.InfiniteSum.NatInt
