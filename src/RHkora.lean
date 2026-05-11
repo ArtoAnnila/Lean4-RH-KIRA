@@ -206,23 +206,6 @@ lemma Gammaℝ_ne_zero_strip (s : ℂ) (hs : 0 < s.re ∧ s.re < 1) :
       linarith
     exact (lt_of_le_of_lt hm_nonpos hm_pos).false
 
-/-
-lemma Gammaℝ_ne_zero_strip (s : ℂ) (hs : 0 < s.re ∧ s.re < 1) :
-    s.Gammaℝ ≠ 0 := by
-  unfold Complex.Gammaℝ
-  apply mul_ne_zero
-  · rw [Complex.cpow_ne_zero_iff]; left
-    exact_mod_cast Real.pi_ne_zero
-  · apply Complex.Gamma_ne_zero
-    intro m heq
-    have h := congr_arg Complex.re heq
-    simp only [Complex.neg_re, Complex.natCast_re] at h
-    have hdiv : (s / 2).re = s.re / 2 := by
-      rw [show (2 : ℂ) = ((2 : ℝ) : ℂ) from by norm_cast, Complex.div_ofReal]
-      simp
-    linarith [hdiv ▸ h, hs.1, Nat.cast_nonneg m]
--/
-
 lemma zeta_iff_xi (s : ℂ) (hs : 0 < s.re ∧ s.re < 1) :
     ζ s = 0 ↔ ξ s = 0 := by
   have hs0 : s ≠ 0 := by rintro rfl; simp at hs
