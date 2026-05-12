@@ -3,7 +3,7 @@
 Lean 4 formalization of the Kernel–Inversion Reconciliation Axiom (KIRA) and the
 Kernel–Orbit Reconciliation Axiom (KORA) as analytic‑continuation principles for the Riemann Hypothesis (RH), together with the
 Kernel–Orbit Reconciliation Axiomatic Proof (KORAP) of RH,
-accompanied by the preprint “Riemann Hypothesis Revisited” (Arto Annila, 2026), archived at Zenodo.
+accompanied by the preprint Annila A. Riemann Hypothesis Revisited. Zenodo 2026. https://doi.org/10.5281/zenodo.20142736.
 
 ## Contents
 
